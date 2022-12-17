@@ -1,27 +1,32 @@
 use cosmwasm_std::{
-    entry_point, from_slice, to_binary, Binary, Deps, DepsMut, Empty, Env, Event,
-    Ibc3ChannelOpenResponse, IbcBasicResponse, IbcChannelCloseMsg, IbcChannelConnectMsg,
-    IbcChannelOpenMsg, IbcChannelOpenResponse, IbcPacketAckMsg, IbcPacketReceiveMsg,
-    IbcPacketTimeoutMsg, IbcReceiveResponse, QueryRequest, StdResult, SystemResult, WasmMsg, Uint128, Addr,
+    entry_point, from_slice, DepsMut, Env, Ibc3ChannelOpenResponse, IbcBasicResponse,
+    IbcChannelCloseMsg, IbcChannelConnectMsg, IbcChannelOpenMsg, IbcChannelOpenResponse,
+    IbcPacketAckMsg, IbcPacketReceiveMsg, IbcPacketTimeoutMsg, IbcReceiveResponse, MessageInfo,
+    StdResult,
 };
 
-use crate::ibc_helpers::{StdAck, try_get_ack_error, validate_order_and_version};
+use crate::ibc_helpers::{validate_order_and_version, StdAck};
 
+use crate::contract::execute;
 use crate::error::ContractError;
-use crate::msg::PacketMsg;
+use crate::msg::{ExecuteMsg, PacketMsg};
 use crate::state::STATE;
 //use crate::state::PENDING;
 
 pub const IBC_VERSION: &str = "counter-1";
 
 #[entry_point]
-/// enforces ordering and versioing constraints
+/// enforces ordering and versioning constraints
 pub fn ibc_channel_open(
     _deps: DepsMut,
     _env: Env,
     msg: IbcChannelOpenMsg,
 ) -> Result<IbcChannelOpenResponse, ContractError> {
-    validate_order_and_version(msg.channel(), msg.counterparty_version())
+    validate_order_and_version(msg.channel(), msg.counterparty_version())?;
+    // We return the version we need (which could be different than the counterparty version)
+    Ok(Some(Ibc3ChannelOpenResponse {
+        version: IBC_VERSION.to_string(),
+    }))
 }
 
 #[entry_point]
@@ -76,21 +81,27 @@ pub fn ibc_packet_receive(
     env: Env,
     msg: IbcPacketReceiveMsg,
 ) -> Result<IbcReceiveResponse, ContractError> {
-    let packet_msg  = from_slice(&msg.packet.data).unwrap();
+    let packet_msg = from_slice(&msg.packet.data).unwrap();
 
     match packet_msg {
-        PacketMsg::Increment { } => increment(deps, env),
+        PacketMsg::Increment {} => increment(deps, env),
         PacketMsg::Reset { count } => reset(deps, env, count),
     }
 }
 
-pub fn increment(deps:DepsMut, _env:Env) -> Result<IbcReceiveResponse, ContractError> {
+pub fn increment(deps: DepsMut, env: Env) -> Result<IbcReceiveResponse, ContractError> {
+    let info = MessageInfo {
+        sender: env.contract.address.clone(),
+        funds: vec![],
+    };
+    execute(deps, env, info, ExecuteMsg::Increment {})?;
     Ok(IbcReceiveResponse::new()
         .add_attribute("method", "ibc_packet_receive")
         .set_ack(StdAck::success(&"0")))
 }
 
-pub fn reset(deps:DepsMut, env:Env, count:i32) -> Result<IbcReceiveResponse, ContractError> {
+pub fn reset(deps: DepsMut, env: Env, count: i32) -> Result<IbcReceiveResponse, ContractError> {
+    // TODO: set local counter's value to the new `count`
     Ok(IbcReceiveResponse::new()
         .add_attribute("method", "ibc_packet_receive")
         .set_ack(StdAck::success(&"0")))

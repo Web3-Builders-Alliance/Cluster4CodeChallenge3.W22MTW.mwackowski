@@ -1,0 +1,8 @@
+start ci-scripts:
+osmosis -> ./generate_template.sh -> ./start.sh (REMEMBER TO STOP IT)
+wasmd -> ./generate_template.sh -> ./start.sh (REMEMBER TO STOP IT)
+
+npm install
+npm run fix
+npm test
+
